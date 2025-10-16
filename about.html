@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GetEvent</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            min-height: 100vh;
+            background: #f0f2f5;
+            display: flex;
+            flex-direction: column;
+        }
+        .fixed-buttons {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 1000;
+        }
+        .fixed-buttons a {
+            background: #34495e;
+            border: none;
+            padding: 10px 15px;
+            color: #fff;
+            cursor: pointer;
+            font-size: 15px;
+            border-radius: 4px;
+            transition: background 0.2s;
+            text-decoration: none;
+            display: block;
+        }
+        .fixed-buttons a:hover {
+            background: #46627f;
+        }
+        header {
+            text-align: center;
+            padding: 20px 0;
+            width: 100%;
+        }
+        .header-bubble {
+            display: inline-block;
+            background: #34495e;
+            padding: 15px 30px;
+            border-radius: 25px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            max-width: 80%;
+            margin: 0 auto;
+        }
+        .header-bubble h1 {
+            margin: 0;
+            font-size: 32px;
+            color: #fff;
+        }
+        .hero {
+            background: #ecf0f1;
+            padding: 40px;
+            text-align: center;
+            flex: 1;
+        }
+        .hero h2 {
+            font-size: 24px;
+            color: #2c3e50;
+        }
+        .hero p {
+            font-size: 16px;
+            color: #34495e;
+        }
+        .hero button {
+            background: #3498db;
+            border: none;
+            padding: 10px 20px;
+            color: #fff;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.2s;
+        }
+        .hero button:hover {
+            background: #2980b9;
+        }
+        footer {
+            background: #2c3e50;
+            color: #fff;
+            text-align: center;
+            padding: 15px;
+            font-size: 14px;
+        }
+        footer a {
+            color: #fff;
+            margin: 0 12px;
+            text-decoration: none;
+        }
+        footer a:hover {
+            text-decoration: underline;
+        }
+        @media (max-width: 768px) {
+            .fixed-buttons {
+                top: 10px;
+                left: 10px;
+                flex-direction: row;
+                gap: 5px;
+            }
+            .fixed-buttons a {
+                padding: 8px 12px;
+                font-size: 14px;
+            }
+            .header-bubble {
+                padding: 10px 20px;
+                max-width: 90%;
+            }
+            .header-bubble h1 {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="fixed-buttons">
+        <a href="profil.html">Профиль</a>
+        <a href="getevent.html">Главная</a>
+        <a href="map.html">Карта</a>
+    </div>
+    <header>
+        <div class="header-bubble">
+            <h1>GetEvent</h1>
+        </div>
+    </header>
+    <section class="hero">
+        <h2>Ваш крутой лендинг</h2>
+        <p>Это пример простой страницы, которую можно расширить.</p>
+        <button>Начать</button>
+    </section>
+    <footer>
+        <nav>
+            <a href="getevent.html">Главная</a>
+            <a href="about.html">О нас</a>
+            <a href="https://upload.wikimedia.org/wikipedia/ru/6/61/Rickrolling.gif">Контакты</a>
+        </nav>
+        <p>&copy; 2025 ООО "GetEvent"</p>
+    </footer>
+</body>
+</html>
