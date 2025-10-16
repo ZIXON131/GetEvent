@@ -1,0 +1,900 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!-- Основной HTML-документ с исправлениями: удобный ввод адреса, авто-удаление, удаление меток, плавающее меню, responsive -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <!-- Установка кодировки и адаптивного вьюпорта -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GetEvent</title>
+    <!-- Подключение API Яндекс.Карт версии 2.1 с указанным ключом -->
+    <script src="https://api-maps.yandex.ru/2.1/?apikey=8722b676-f951-4328-9e34-0943c9623efc&lang=ru_RU" type="text/javascript"></script>
+    <style>
+        html {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #f0f2f5 0%, #d1d8e0 100%);
+        }
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            min-height: 100vh;
+            background: #f0f2f5;
+            display: flex;
+            flex-direction: column;
+        }
+        .fixed-buttons {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 1000;
+        }
+        .fixed-buttons a {
+            background: #34495e;
+            border: none;
+            padding: 10px 15px;
+            color: #fff;
+            cursor: pointer;
+            font-size: 15px;
+            border-radius: 4px;
+            transition: background 0.2s;
+            text-decoration: none;
+            display: block;
+        }
+        .fixed-buttons a:hover {
+            background: #46627f;
+        }
+        header {
+            text-align: center;
+            padding: 20px 0;
+            width: 100%;
+        }
+        .header-bubble {
+            display: inline-block;
+            background: #34495e;
+            padding: 15px 30px;
+            border-radius: 25px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            max-width: 80%;
+            margin: 0 auto;
+        }
+        .header-bubble h1 {
+            margin: 0;
+            font-size: 32px;
+            color: #fff;
+        }
+        .hero {
+            background: #ecf0f1;
+            padding: 40px;
+            text-align: center;
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        .hero h2 {
+            font-size: 24px;
+            color: #2c3e50;
+        }
+        .hero p {
+            font-size: 16px;
+            color: #34495e;
+        }
+        .hero button {
+            background: #3498db;
+            border: none;
+            padding: 10px 20px;
+            color: #fff;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.2s;
+        }
+        .hero button:hover {
+            background: #2980b9;
+        }
+        .js-container {
+            width: 100%;
+            max-width: 1000px;
+            min-height: 600px;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #34495e;
+            font-size: 18px;
+        }
+        #map-container {
+            width: 100%;
+            height: 100%;
+            min-height: 600px;
+        }
+        .error-message {
+            color: #e74c3c;
+            font-size: 16px;
+            text-align: center;
+        }
+        footer {
+            background: #2c3e50;
+            color: #fff;
+            text-align: center;
+            padding: 15px;
+            font-size: 14px;
+        }
+        footer a {
+            color: #fff;
+            margin: 0 12px;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        footer a:hover {
+            text-decoration: underline;
+        }
+        .page {
+            display: none;
+        }
+        .page.active {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+        }
+        /* Стили для ролей и меток в профиле */
+        .role-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .role-button {
+            padding: 8px 16px;
+            border: 1px solid #3498db;
+            border-radius: 4px;
+            cursor: pointer;
+            background: #fff;
+            color: #3498db;
+        }
+        .role-button.active {
+            background: #3498db;
+            color: #fff;
+        }
+        #executor-profile-section {
+            display: none;
+            width: 100%;
+            max-width: 600px;
+            margin-bottom: 20px;
+        }
+        #executor-profile-form {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        #executor-profile-form input, #executor-profile-form textarea {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        #executor-profile-form textarea {
+            height: 80px;
+            resize: vertical;
+        }
+        #add-marker-section {
+            display: none;
+            width: 100%;
+            max-width: 600px;
+            margin-bottom: 20px;
+        }
+        #add-marker-form {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        #add-marker-form input, #add-marker-form textarea {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        #add-marker-form textarea {
+            height: 80px;
+            resize: vertical;
+        }
+        #add-marker-form button {
+            align-self: flex-start;
+        }
+        #admin-approval {
+            display: none;
+            position: absolute;
+            right: 20px;
+            top: 150px;
+            width: 300px;
+            background: #fff;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            padding: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        #approved-section {
+            display: none;
+            width: 100%;
+            max-width: 600px;
+            margin-top: 20px;
+        }
+        .pending-item, .approved-item {
+            border-bottom: 1px solid #eee;
+            padding: 10px 0;
+        }
+        .pending-item button, .approved-item button {
+            margin-right: 5px;
+            padding: 5px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .edit-btn {
+            background: #f39c12;
+            color: #fff;
+        }
+        .approve-btn {
+            background: #27ae60;
+            color: #fff;
+        }
+        .reject-btn, .delete-btn {
+            background: #e74c3c;
+            color: #fff;
+        }
+        #edit-modal, #marker-info-modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            z-index: 1000;
+            width: 400px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        #marker-info-modal h3 {
+            margin-top: 0;
+        }
+        #marker-info-modal a {
+            color: #3498db;
+            text-decoration: none;
+        }
+        #marker-info-modal a:hover {
+            text-decoration: underline;
+        }
+        #edit-form {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        #edit-form input, #edit-form textarea {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        #edit-form textarea {
+            height: 80px;
+            resize: vertical;
+        }
+        #edit-save {
+            background: #3498db;
+            color: #fff;
+        }
+        #edit-close, #info-close {
+            background: #95a5a6;
+            color: #fff;
+            margin-top: 10px;
+        }
+        @media (max-width: 768px) {
+            .fixed-buttons {
+                top: 10px;
+                left: 10px;
+                flex-direction: row;
+                gap: 5px;
+            }
+            .fixed-buttons a {
+                padding: 8px 12px;
+                font-size: 14px;
+            }
+            .header-bubble {
+                padding: 10px 20px;
+                max-width: 90%;
+            }
+            .header-bubble h1 {
+                font-size: 24px;
+            }
+            .js-container {
+                min-height: 300px;
+                font-size: 16px;
+            }
+            #map-container {
+                min-height: 300px;
+            }
+            #admin-approval {
+                position: static;
+                width: 100%;
+                margin-top: 20px;
+            }
+            #edit-modal, #marker-info-modal {
+                width: 90%;
+                padding: 15px;
+            }
+            .hero {
+                padding: 20px;
+            }
+            .role-buttons {
+                justify-content: center;
+            }
+        }
+        @media (max-width: 480px) {
+            .header-bubble h1 {
+                font-size: 20px;
+            }
+            .hero h2 {
+                font-size: 20px;
+            }
+            .hero p {
+                font-size: 14px;
+            }
+            .hero button {
+                font-size: 14px;
+                padding: 8px 16px;
+            }
+            #add-marker-form input, #add-marker-form textarea, #edit-form input, #edit-form textarea {
+                font-size: 14px;
+            }
+            #admin-approval, #approved-section {
+                width: 100%;
+                max-width: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Фиксированная панель навигации -->
+    <div class="fixed-buttons">
+        <a href="#" data-page="profil">Профиль</a>
+        <a href="#" data-page="getevent">Главная</a>
+        <a href="#" data-page="map">Карта</a>
+    </div>
+    <!-- Страница "Главная" -->
+    <div id="getevent" class="page active">
+        <header>
+            <div class="header-bubble">
+                <h1>GetEvent</h1>
+            </div>
+        </header>
+        <section class="hero">
+            <h2>Ваш крутой лендинг</h2>
+            <p>Это пример простой страницы, которую можно расширить.</p>
+            <button>Начать</button>
+        </section>
+    </div>
+    <!-- Страница "Карта" -->
+    <div id="map" class="page">
+        <header>
+            <div class="header-bubble">
+                <h1>GetEvent</h1>
+            </div>
+        </header>
+        <section class="hero">
+            <div class="js-container" id="js-content">
+                <div id="map-container"></div>
+            </div>
+        </section>
+    </div>
+    <!-- Страница "Профиль" с ролями, профилем исполнителя и метками -->
+    <div id="profil" class="page">
+        <header>
+            <div class="header-bubble">
+                <h1>GetEvent</h1>
+            </div>
+        </header>
+        <section class="hero">
+            <h2>Ваш профиль</h2>
+            <p>Это страница вашего профиля, которую можно настроить.</p>
+            <!-- Кнопки переключения ролей -->
+            <div class="role-buttons">
+                <div class="role-button" data-role="guest">Гость</div>
+                <div class="role-button" data-role="executor">Исполнитель</div>
+                <div class="role-button" data-role="admin">Админ</div>
+            </div>
+            <!-- Секция редактирования профиля исполнителя -->
+            <div id="executor-profile-section">
+                <h3>Профиль исполнителя</h3>
+                <form id="executor-profile-form">
+                    <input type="text" id="executor-name" placeholder="Имя исполнителя" required>
+                    <textarea id="executor-desc" placeholder="Описание исполнителя"></textarea>
+                    <button type="submit">Сохранить</button>
+                </form>
+            </div>
+            <!-- Секция добавления метки -->
+            <div id="add-marker-section">
+                <h3>Добавить метку</h3>
+                <form id="add-marker-form">
+                    <input type="text" id="marker-address" list="address-suggestions" placeholder="Адрес (выберите из списка или введите)" required>
+                    <datalist id="address-suggestions">
+                        <option value="Невский проспект, Санкт-Петербург">
+                        <option value="Дворцовая площадь, Санкт-Петербург">
+                        <option value="Эрмитаж, Санкт-Петербург">
+                        <option value="Петропавловская крепость, Санкт-Петербург">
+                        <option value="Васильевский остров, Санкт-Петербург">
+                        <!-- Добавьте больше опций по необходимости -->
+                    </datalist>
+                    <input type="date" id="marker-date" required>
+                    <input type="time" id="marker-time" required>
+                    <input type="text" id="marker-name" placeholder="Название события" required>
+                    <input type="url" id="marker-link" placeholder="Ссылка на мероприятие (http/https)" required>
+                    <input type="text" id="marker-executor-name" placeholder="Имя исполнителя" required>
+                    <textarea id="marker-executor-desc" placeholder="Описание исполнителя"></textarea>
+                    <button type="submit">Добавить</button>
+                </form>
+                <p id="add-marker-error" class="error-message" style="display: none;"></p>
+            </div>
+            <!-- Список на одобрение (для админа) -->
+            <div id="admin-approval">
+                <h3>Метки на одобрение</h3>
+                <div id="pending-list"></div>
+            </div>
+            <!-- Список одобренных меток (для админа и исполнителя) -->
+            <div id="approved-section">
+                <h3>Одобренные метки</h3>
+                <div id="approved-list"></div>
+            </div>
+            <button>Редактировать</button>
+        </section>
+    </div>
+    <!-- Модальное окно для редактирования метки -->
+    <div id="edit-modal">
+        <h3>Редактировать метку</h3>
+        <form id="edit-form">
+            <input type="text" id="edit-address" list="address-suggestions" placeholder="Адрес" required>
+            <input type="date" id="edit-date" required>
+            <input type="time" id="edit-time" required>
+            <input type="text" id="edit-name" placeholder="Название" required>
+            <input type="url" id="edit-link" placeholder="Ссылка" required>
+            <input type="text" id="edit-executor-name" placeholder="Имя исполнителя" required>
+            <textarea id="edit-executor-desc" placeholder="Описание исполнителя"></textarea>
+            <button type="button" id="edit-save">Сохранить</button>
+            <button type="button" id="edit-close">Закрыть</button>
+        </form>
+    </div>
+    <!-- Плавающее меню информации о метке -->
+    <div id="marker-info-modal">
+        <h3 id="info-name"></h3>
+        <p id="info-date-time"></p>
+        <p id="info-address"></p>
+        <p id="info-executor"></p>
+        <p id="info-executor-desc"></p>
+        <a id="info-link" target="_blank">Подробнее о мероприятии</a>
+        <button id="info-close">Закрыть</button>
+    </div>
+    <!-- Страница "О нас" -->
+    <div id="about" class="page">
+        <header>
+            <div class="header-bubble">
+                <h1>GetEvent</h1>
+            </div>
+        </header>
+        <section class="hero">
+            <h2>О нас</h2>
+            <p>Мы - команда GetEvent, создающая крутые решения для ваших мероприятий.</p>
+            <button>Узнать больше</button>
+        </section>
+    </div>
+    <!-- Футер -->
+    <footer>
+        <nav>
+            <a href="#" data-page="getevent">Главная</a>
+            <a href="#" data-page="about">О нас</a>
+            <a href="https://example.com/contact">Контакты</a>
+        </nav>
+        <p>&copy; 2025 ООО "GetEvent"</p>
+    </footer>
+    <!-- Скрипт для обработки XLSX-файлов (не изменен) -->
+    <script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+            return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+            if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+                try {
+                    var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                    var firstSheetName = workbook.SheetNames[0];
+                    var worksheet = workbook.Sheets[firstSheetName];
+                    var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                    var filteredData = jsonData.filter(row => row.some(filledCell));
+                    var headerRowIndex = filteredData.findIndex((row, index) =>
+                        row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                    );
+                    if (headerRowIndex === -1 || headerRowIndex > 25) {
+                        headerRowIndex = 0;
+                    }
+                    var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex));
+                    csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                    return csv;
+                } catch (e) {
+                    console.error(e);
+                    return "";
+                }
+            }
+            return gk_fileData[filename] || "";
+        }
+    </script>
+    <!-- Скрипт для переключения страниц, ролей, меток и карты -->
+    <script type="text/javascript">
+        // Переменные для карты и меток
+        let map = null;
+        let currentRole = 'guest';
+        let pendingMarkers = JSON.parse(localStorage.getItem('pendingMarkers')) || [];
+        let approvedMarkers = JSON.parse(localStorage.getItem('approvedMarkers')) || [];
+        let executorInfo = JSON.parse(localStorage.getItem('executorInfo')) || { name: '', desc: '' };
+        let editIndex = -1; // Индекс редактируемой метки
+
+        // Функция инициализации Яндекс.Карты
+        function initYandexMap() {
+            if (typeof ymaps === 'undefined') {
+                document.getElementById('map-container').innerHTML = '<p class="error-message">Ошибка загрузки Яндекс.Карт</p>';
+                return;
+            }
+            ymaps.ready(() => {
+                try {
+                    map = new ymaps.Map('map-container', {
+                        center: [59.9342802, 30.3350986], // Центр Санкт-Петербурга
+                        zoom: 12,
+                        controls: ['zoomControl', 'geolocationControl', 'searchControl']
+                    });
+                    // Добавление одобренных меток на карту
+                    addMarkersToMap();
+                    // Запуск проверки истекших меток
+                    setInterval(checkExpiredMarkers, 60000); // Каждую минуту
+                } catch (e) {
+                    console.error('Ошибка инициализации карты:', e);
+                    document.getElementById('map-container').innerHTML = '<p class="error-message">Не удалось инициализировать карту</p>';
+                }
+            });
+        }
+
+        // Функция добавления меток на карту с кликом для меню
+        function addMarkersToMap() {
+            map.geoObjects.removeAll();
+            approvedMarkers.forEach((marker, index) => {
+                const placemark = new ymaps.Placemark(
+                    marker.coords,
+                    { hintContent: marker.name },
+                    { preset: 'islands#blueDotIcon' }
+                );
+                placemark.events.add('click', () => showMarkerInfo(marker));
+                map.geoObjects.add(placemark);
+            });
+        }
+
+        // Показ плавающего меню информации
+        function showMarkerInfo(marker) {
+            document.getElementById('info-name').textContent = marker.name;
+            document.getElementById('info-date-time').textContent = `Дата: ${marker.date} Время: ${marker.time}`;
+            document.getElementById('info-address').textContent = `Адрес: ${marker.address}`;
+            document.getElementById('info-executor').textContent = `Исполнитель: ${marker.executorName}`;
+            document.getElementById('info-executor-desc').textContent = `Описание исполнителя: ${marker.executorDesc}`;
+            document.getElementById('info-link').href = marker.eventLink;
+            document.getElementById('info-link').textContent = 'Подробнее о мероприятии';
+            document.getElementById('marker-info-modal').style.display = 'block';
+        }
+
+        // Функция переключения ролей
+        function switchRole(role) {
+            currentRole = role;
+            document.querySelectorAll('.role-button').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.role === role) btn.classList.add('active');
+            });
+            updateProfileUI();
+        }
+
+        // Обновление UI профиля в зависимости от роли
+        function updateProfileUI() {
+            const executorSection = document.getElementById('executor-profile-section');
+            const addSection = document.getElementById('add-marker-section');
+            const adminApproval = document.getElementById('admin-approval');
+            const approvedSection = document.getElementById('approved-section');
+            if (currentRole === 'admin' || currentRole === 'executor') {
+                executorSection.style.display = 'block';
+                addSection.style.display = 'block';
+                approvedSection.style.display = 'block';
+                // Автозаполнение формы добавления из executorInfo
+                document.getElementById('marker-executor-name').value = executorInfo.name;
+                document.getElementById('marker-executor-desc').value = executorInfo.desc;
+                // Автозаполнение профиля исполнителя
+                document.getElementById('executor-name').value = executorInfo.name;
+                document.getElementById('executor-desc').value = executorInfo.desc;
+                renderApprovedList();
+            } else {
+                executorSection.style.display = 'none';
+                addSection.style.display = 'none';
+                approvedSection.style.display = 'none';
+            }
+            if (currentRole === 'admin') {
+                adminApproval.style.display = 'block';
+                renderPendingList();
+            } else {
+                adminApproval.style.display = 'none';
+            }
+        }
+
+        // Рендеринг списка ожидающих меток
+        function renderPendingList() {
+            const list = document.getElementById('pending-list');
+            list.innerHTML = '';
+            pendingMarkers.forEach((marker, index) => {
+                const item = document.createElement('div');
+                item.classList.add('pending-item');
+                item.innerHTML = `
+                    <p>${marker.name} - ${marker.address}<br>${marker.date} ${marker.time}<br>Ссылка: ${marker.eventLink}<br>Исполнитель: ${marker.executorName}</p>
+                    <button class="edit-btn" onclick="openEditModal(${index})">Редактировать</button>
+                    <button class="approve-btn" onclick="approveMarker(${index})">Одобрить</button>
+                    <button class="reject-btn" onclick="rejectMarker(${index})">Отклонить</button>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        // Рендеринг списка одобренных меток
+        function renderApprovedList() {
+            const list = document.getElementById('approved-list');
+            list.innerHTML = '';
+            approvedMarkers.forEach((marker, index) => {
+                if (currentRole === 'admin' || marker.creatorRole === 'executor') {
+                    const item = document.createElement('div');
+                    item.classList.add('approved-item');
+                    item.innerHTML = `
+                        <p>${marker.name} - ${marker.address}<br>${marker.date} ${marker.time}</p>
+                        <button class="delete-btn" onclick="deleteMarker(${index})">Удалить</button>
+                    `;
+                    list.appendChild(item);
+                }
+            });
+        }
+
+        // Добавление метки в pending
+        function addPendingMarker(event) {
+            event.preventDefault();
+            const address = document.getElementById('marker-address').value;
+            const date = document.getElementById('marker-date').value;
+            const time = document.getElementById('marker-time').value;
+            const name = document.getElementById('marker-name').value;
+            const link = document.getElementById('marker-link').value;
+            const executorName = document.getElementById('marker-executor-name').value;
+            const executorDesc = document.getElementById('marker-executor-desc').value;
+            const error = document.getElementById('add-marker-error');
+
+            if (!address || !date || !time || !name || !link || !executorName) {
+                error.textContent = 'Заполните все поля';
+                error.style.display = 'block';
+                return;
+            }
+            if (!link.startsWith('http://') && !link.startsWith('https://')) {
+                error.textContent = 'Ссылка должна начинаться с http:// или https://';
+                error.style.display = 'block';
+                return;
+            }
+
+            // Геокодирование адреса
+            ymaps.geocode(address, { results: 1 }).then(res => {
+                const geoObject = res.geoObjects.get(0);
+                if (geoObject) {
+                    const coords = geoObject.geometry.getCoordinates();
+                    const marker = { address, date, time, name, eventLink: link, executorName, executorDesc, coords, creatorRole: currentRole };
+                    pendingMarkers.push(marker);
+                    localStorage.setItem('pendingMarkers', JSON.stringify(pendingMarkers));
+                    error.style.display = 'none';
+                    document.getElementById('add-marker-form').reset();
+                    // Перезаполнить из executorInfo
+                    document.getElementById('marker-executor-name').value = executorInfo.name;
+                    document.getElementById('marker-executor-desc').value = executorInfo.desc;
+                    if (currentRole === 'admin') renderPendingList();
+                } else {
+                    error.textContent = 'Адрес не найден';
+                    error.style.display = 'block';
+                }
+            }).catch(e => {
+                console.error(e);
+                error.textContent = 'Ошибка геокодирования';
+                error.style.display = 'block';
+            });
+        }
+
+        // Сохранение профиля исполнителя
+        function saveExecutorProfile(event) {
+            event.preventDefault();
+            executorInfo.name = document.getElementById('executor-name').value;
+            executorInfo.desc = document.getElementById('executor-desc').value;
+            localStorage.setItem('executorInfo', JSON.stringify(executorInfo));
+            // Обновить форму добавления
+            document.getElementById('marker-executor-name').value = executorInfo.name;
+            document.getElementById('marker-executor-desc').value = executorInfo.desc;
+        }
+
+        // Открытие модального окна редактирования
+        function openEditModal(index) {
+            editIndex = index;
+            const marker = pendingMarkers[index];
+            document.getElementById('edit-address').value = marker.address;
+            document.getElementById('edit-date').value = marker.date;
+            document.getElementById('edit-time').value = marker.time;
+            document.getElementById('edit-name').value = marker.name;
+            document.getElementById('edit-link').value = marker.eventLink;
+            document.getElementById('edit-executor-name').value = marker.executorName;
+            document.getElementById('edit-executor-desc').value = marker.executorDesc;
+            document.getElementById('edit-modal').style.display = 'block';
+        }
+
+        // Сохранение редактирования метки
+        function saveEdit() {
+            if (editIndex === -1) return;
+            const marker = pendingMarkers[editIndex];
+            marker.address = document.getElementById('edit-address').value;
+            marker.date = document.getElementById('edit-date').value;
+            marker.time = document.getElementById('edit-time').value;
+            marker.name = document.getElementById('edit-name').value;
+            marker.eventLink = document.getElementById('edit-link').value;
+            marker.executorName = document.getElementById('edit-executor-name').value;
+            marker.executorDesc = document.getElementById('edit-executor-desc').value;
+            // Перегеокодирование, если адрес изменился
+            ymaps.geocode(marker.address, { results: 1 }).then(res => {
+                const geoObject = res.geoObjects.get(0);
+                if (geoObject) {
+                    marker.coords = geoObject.geometry.getCoordinates();
+                }
+                localStorage.setItem('pendingMarkers', JSON.stringify(pendingMarkers));
+                renderPendingList();
+                closeEditModal();
+            });
+        }
+
+        // Закрытие модального окна
+        function closeEditModal() {
+            document.getElementById('edit-modal').style.display = 'none';
+            editIndex = -1;
+        }
+
+        // Закрытие меню информации
+        function closeInfoModal() {
+            document.getElementById('marker-info-modal').style.display = 'none';
+        }
+
+        // Одобрение метки
+        function approveMarker(index) {
+            const marker = pendingMarkers.splice(index, 1)[0];
+            approvedMarkers.push(marker);
+            localStorage.setItem('pendingMarkers', JSON.stringify(pendingMarkers));
+            localStorage.setItem('approvedMarkers', JSON.stringify(approvedMarkers));
+            renderPendingList();
+            renderApprovedList();
+            if (map) addMarkersToMap();
+        }
+
+        // Отклонение метки
+        function rejectMarker(index) {
+            pendingMarkers.splice(index, 1);
+            localStorage.setItem('pendingMarkers', JSON.stringify(pendingMarkers));
+            renderPendingList();
+        }
+
+        // Удаление одобренной метки
+        function deleteMarker(index) {
+            approvedMarkers.splice(index, 1);
+            localStorage.setItem('approvedMarkers', JSON.stringify(approvedMarkers));
+            renderApprovedList();
+            if (map) addMarkersToMap();
+        }
+
+        // Проверка и удаление истекших меток
+        function checkExpiredMarkers() {
+            const now = new Date();
+            approvedMarkers = approvedMarkers.filter(marker => {
+                const markerDateTime = new Date(`${marker.date}T${marker.time}`);
+                const expiredTime = new Date(markerDateTime.getTime() + 5 * 60000); // +5 мин
+                return now < expiredTime;
+            });
+            localStorage.setItem('approvedMarkers', JSON.stringify(approvedMarkers));
+            if (map) addMarkersToMap();
+            renderApprovedList();
+        }
+
+        // Обработчики событий
+        document.addEventListener('DOMContentLoaded', () => {
+            // Переключение страниц
+            document.querySelectorAll('.fixed-buttons a, footer a:not([href^="http"])').forEach(link => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const pageId = link.getAttribute('data-page');
+                    if (pageId) {
+                        document.querySelectorAll('.page').forEach(page => {
+                            page.classList.remove('active');
+                        });
+                        document.getElementById(pageId).classList.add('active');
+                        if (pageId === 'map' && !map) {
+                            initYandexMap();
+                        }
+                        if (pageId === 'profil') {
+                            updateProfileUI();
+                        }
+                    }
+                });
+            });
+
+            // Переключение ролей
+            document.querySelectorAll('.role-button').forEach(btn => {
+                btn.addEventListener('click', () => switchRole(btn.dataset.role));
+            });
+            // По умолчанию активируем гость
+            switchRole('guest');
+
+            // Форма добавления метки
+            document.getElementById('add-marker-form').addEventListener('submit', addPendingMarker);
+
+            // Форма профиля исполнителя
+            document.getElementById('executor-profile-form').addEventListener('submit', saveExecutorProfile);
+
+            // Модальное редактирование
+            document.getElementById('edit-save').addEventListener('click', saveEdit);
+            document.getElementById('edit-close').addEventListener('click', closeEditModal);
+
+            // Модальное меню информации
+            document.getElementById('info-close').addEventListener('click', closeInfoModal);
+        });
+    </script>
+</body>
+</html>
